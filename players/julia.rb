@@ -1,14 +1,14 @@
-class Hallie < Player
+class Julia < Player
 
   def self.ancestor
-    "Hallie"
+    "Julia"
   end
 
-  @@c1 = 1.0 #importance of fruit based on how close you are to clinching
-  @@c2 = 1.0 #ditto, but based on opponent closeness to clinching
-  @@c3 = 1.0 #importance of fruits with many options available
-  @@c4 = 1.0 #value fall-off from distance
-  @@c5 = 5.0 #propensity to pick up
+  @@c1 = 0.757 #importance of fruit based on how close you are to clinching
+  @@c2 = 0.0107 #ditto, but based on opponent closeness to clinching
+  @@c3 = 2.10 #importance of fruits with many options available
+  @@c4 = 0.252 #value fall-off from distance
+  @@c5 = 2.07 #propensity to pick up
 
   def self.set_params(array)
     class_variable_set(:@@c1, array[0])
@@ -66,7 +66,9 @@ class Hallie < Player
   def valueBoard
     width.times do |i|
       height.times do |j|
-        addToBoardValues(fruitValue(@board[i][j]), [i,j]) if @board[i][j] > 0
+        if @board[i][j] > 0 && (dist(@opPos, [i,j]) != 0 || dist(@myPos, [i,j]) == 0)
+          addToBoardValues(fruitValue(@board[i][j]), [i,j])
+        end
       end
     end
   end

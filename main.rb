@@ -4,14 +4,15 @@ require_relative "player.rb"
 require_relative "players/random_player.rb"
 require_relative "players/simple_player.rb"
 require_relative "players/my_player.rb"
+require_relative "players/julia.rb"
 require 'csv'
 
-BIG_MUTATION_PROB = 0.09
-MEDIUM_MUTATION_PROB = 0.27
-SMALL_MUTATION_PROB = 0.63
+BIG_MUTATION_PROB = 0.06
+MEDIUM_MUTATION_PROB = 0.18
+SMALL_MUTATION_PROB = 0.42
 
 RUNTIME = 3_600 * 10 #ten hours
-POOL_CAPACITY = 1_500
+POOL_CAPACITY = 1_000
 
 #Mutations happen by multiplying parameters by a log-normal random variate.
 #if given a second argument >= 1, will make a huge mutation.
@@ -25,7 +26,7 @@ def mutate(player, a = rand)
   elsif a < 1
     sigma = 0
   else
-    sigma = 1.5
+    sigma = 1
   end
   new_player = player.clone
   params = new_player.params
@@ -42,15 +43,18 @@ def gaussian
   return x
 end
 
-fixed_players = [RandomPlayer] + [SimplePlayer] * 3 + [MyPlayer] * 3
-mutating_players = Array.new(100, mutate(MyPlayer, 1))
+#RandomPlayer is thrown in to ensure that not everyone gets killed off.
+fixed_players = [RandomPlayer] + [SimplePlayer, Hallie, Julia] * 3
+mutating_players = Array.new(100, mutate(Julia, 1)) + [Julia, Hallie] + Array.new(100, mutate(Hallie, 1))
 
 start_time = Time.now
+
+puts "Evolving"
 
 #Plays games.  If mutating player loses, that player is killed.
 #If mutating player wins, the player is kept and a mutated clone created if space permits.
 #If mutating player ties, there's a 30% chance of death, a 30% chance of a mutated clone being created if space permits, and a 40% chance that player is simply kept.
-while Time.now - start_time < RUNTIME
+while Time.now - start_time < RUNTIME && mutating_players.any?
   player1 = fixed_players.sample
   player2_index = rand(mutating_players.length)
   player2 = mutating_players[player2_index]
@@ -67,12 +71,16 @@ while Time.now - start_time < RUNTIME
   end
 end
 
+puts "Determining top 25 players."
+
 #Now, have the remaining players play 100 games each and give them each a score
 #A win is +1 and a loss is -1
+#There's a little luck involved here, so I'll pick the winners here and play
+#them off.
 scores = []
 mutating_players.each do |player1|
   score = 0
-  [SimplePlayer, MyPlayer].each do |player2|
+  [SimplePlayer, Hallie, Julia].each do |player2|
     50.times do
       game = Game.new(player1, player2)
       result = game.play
@@ -83,14 +91,36 @@ mutating_players.each do |player1|
       end
     end
   end
-  scores << [score] + player1.params
+  scores << { :score => score, :player => player1 }
 end
 
-#Find the highest 20 scores, and write to file
-best = scores.sort_by { |i| -i[0] }.first(20)
+puts "ordering the top 25"
+
+#Find the highest scores, and have them compete
+best = scores.sort_by { |i| -i[:score] }.first(25)
+
+best.each do |candidate|
+  playoff_score = 0
+  player1 = candidate[:player]
+  [SimplePlayer, Julia, Hallie].each do |player2|
+    750.times do
+      game = Game.new(player1, player2)
+      result = game.play
+      if result == nil || result < 0
+        playoff_score = playoff_score - 1
+      elsif result > 0
+        playoff_score += 1
+      end
+    end
+  end
+  candidate[:playoff] = playoff_score
+end
+
+puts "writing to file"
 
 CSV.open("players.csv", "wb") do |csv|
-  best.each do |player_score|
-    csv << player_score
+  best.sort_by { |i| -i[:playoff] }.each do |candidate|
+    player = candidate[:player]
+    csv << [candidate[:playoff], player.ancestor] + player.params
   end
 end
